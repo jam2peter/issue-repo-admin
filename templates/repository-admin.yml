@@ -1,0 +1,61 @@
+name: Issue Repo Admin
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  create:
+    if: >-
+      github.event.issue.pull_request == null &&
+      startsWith(github.event.comment.body, '/repo-admin create ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      REPO_ADMIN_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
+      CONFIG: ${{ vars.REPO_ADMIN_CONFIG || 'repo-admin.json' }}
+      COMMENT: ${{ github.event.comment.body }}
+      ASSOCIATION: ${{ github.event.comment.author_association }}
+      ISSUE: ${{ github.event.issue.number }}
+      SOURCE_REPO: ${{ github.repository }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run constrained repository operation
+        id: provision
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/repo_admin.py \
+            --config "$CONFIG" \
+            --comment "$COMMENT" \
+            --association "$ASSOCIATION" > result.json
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Record sanitized result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY' > result.txt
+          import json
+          d=json.load(open("result.json", encoding="utf-8"))
+          print("REPO_ADMIN=" + ("PASS" if d.get("ok") else "FAIL"))
+          print("REPOSITORY=" + str(d.get("full_name") or d.get("repository") or ""))
+          print("CREATED=" + ("yes" if d.get("created") else "no"))
+          print("VISIBILITY=" + str(d.get("visibility") or d.get("actual_visibility") or ""))
+          print("URL=" + str(d.get("url") or ""))
+          print("ERROR=" + str(d.get("error") or ""))
+          print("SECRET_EXPOSED=NO")
+          PY
+          gh issue comment "$ISSUE" --repo "$SOURCE_REPO" --body-file result.txt
+
+      - name: Enforce result
+        if: steps.provision.outputs.rc != '0'
+        run: exit 1
