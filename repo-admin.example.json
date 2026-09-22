@@ -1,0 +1,11 @@
+{
+  "owner": "example-owner",
+  "owner_type": "user",
+  "allowed_author_associations": ["OWNER"],
+  "default_description": "Managed by Issue Repo Admin",
+  "auto_init": true,
+  "has_issues": true,
+  "has_projects": true,
+  "has_wiki": false,
+  "delete_branch_on_merge": true
+}
